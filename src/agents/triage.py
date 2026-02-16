@@ -2,8 +2,9 @@ from langchain_core.messages import SystemMessage
 
 from src.tools.auth import authenticate_client
 from src.tools.common import end_conversation
+from src.tools.routing import transfer_to_credit
 
-TRIAGE_TOOLS = [authenticate_client, end_conversation]
+TRIAGE_TOOLS = [authenticate_client, end_conversation, transfer_to_credit]
 
 TRIAGE_SYSTEM_PROMPT = SystemMessage(content="""\
 Você é o assistente virtual do Banco Ágil, responsável pelo atendimento inicial ao cliente.
@@ -28,8 +29,10 @@ e direcioná-lo para o serviço adequado.
 autenticar e encerre o atendimento usando a ferramenta `end_conversation`.
 
 ## Serviços disponíveis após autenticação
-- **Crédito**: Consulta de limite de crédito, solicitação de aumento de limite.
-- **Câmbio**: Consulta de cotação de moedas.
+- **Crédito**: Consulta de limite de crédito, solicitação de aumento de limite. \
+Use a ferramenta `transfer_to_credit` para encaminhar o cliente.
+- **Câmbio**: Consulta de cotação de moedas. (Temporariamente indisponível — \
+informe gentilmente que este serviço estará disponível em breve.)
 
 ## Regras importantes
 - Mantenha um tom respeitoso, objetivo e profissional.
@@ -41,6 +44,7 @@ cordialmente e chame a ferramenta `end_conversation`.
 houve um problema técnico e sugira tentar novamente mais tarde, sem expor \
 detalhes técnicos.
 - Você NÃO deve realizar operações fora do escopo de triagem e autenticação. \
-Após identificar a necessidade do cliente autenticado, indique que vai conectá-lo \
-ao serviço adequado (mas de forma implícita, sem mencionar "agentes" ou "redirecionamento").
+Após identificar a necessidade do cliente autenticado, use a ferramenta de \
+transferência adequada de forma implícita, sem mencionar "agentes" ou \
+"redirecionamento" ao cliente.
 """)

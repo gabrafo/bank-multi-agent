@@ -1,18 +1,40 @@
-import json
 import logging
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from src.agents.credit import CREDIT_SYSTEM_PROMPT, CREDIT_TOOLS
+from src.agents.interview import INTERVIEW_SYSTEM_PROMPT, INTERVIEW_TOOLS
 from src.agents.triage import TRIAGE_SYSTEM_PROMPT, TRIAGE_TOOLS
 from src.config import get_llm
 from src.state import AgentState
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 
 logger = logging.getLogger(__name__)
 
-# Mapa de ferramentas por nome para execução
-TOOL_MAP = {tool.name: tool for tool in TRIAGE_TOOLS}
+# Configuração de cada agente: prompt de sistema e ferramentas
+AGENT_CONFIG = {
+    "triage": {"prompt": TRIAGE_SYSTEM_PROMPT, "tools": TRIAGE_TOOLS},
+    "credit": {"prompt": CREDIT_SYSTEM_PROMPT, "tools": CREDIT_TOOLS},
+    "interview": {"prompt": INTERVIEW_SYSTEM_PROMPT, "tools": INTERVIEW_TOOLS},
+}
+
+# Mapa global de ferramentas por nome (deduplicado)
+ALL_TOOLS = list(
+    {
+        tool.name: tool
+        for config in AGENT_CONFIG.values()
+        for tool in config["tools"]
+    }.values()
+)
+TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
+
+# Mapa de ferramentas de transferência → agente de destino
+TRANSFER_MAP = {
+    "transfer_to_credit": "credit",
+    "transfer_to_interview": "interview",
+    "transfer_to_triage": "triage",
+}
 
 
 def _get_initial_state() -> dict:
@@ -26,21 +48,21 @@ def _get_initial_state() -> dict:
     }
 
 
-# --- Nós do grafo ---
+# --- Nó genérico de agente ---
 
 
-def triage_node(state: AgentState) -> dict:
-    """Nó do agente de triagem: chama o LLM com o prompt de sistema e ferramentas."""
+def _agent_node(state: AgentState, agent_name: str) -> dict:
+    """Nó genérico: chama o LLM com o prompt e ferramentas do agente."""
+    config = AGENT_CONFIG[agent_name]
     llm = get_llm()
-    llm_with_tools = llm.bind_tools(TRIAGE_TOOLS)
+    llm_with_tools = llm.bind_tools(config["tools"])
 
-    # Monta as mensagens: system prompt + histórico
-    messages = [TRIAGE_SYSTEM_PROMPT] + state["messages"]
+    messages = [config["prompt"]] + state["messages"]
 
     try:
         response = llm_with_tools.invoke(messages)
     except Exception as e:
-        logger.error("Erro ao chamar o LLM: %s", e)
+        logger.error("Erro ao chamar o LLM (%s): %s", agent_name, e)
         error_msg = AIMessage(
             content=(
                 "Peço desculpas, mas estou com dificuldades técnicas no momento. "
@@ -52,8 +74,29 @@ def triage_node(state: AgentState) -> dict:
     return {"messages": [response]}
 
 
+# --- Nós específicos (wrappers) ---
+
+
+def triage_node(state: AgentState) -> dict:
+    """Nó do agente de triagem."""
+    return _agent_node(state, "triage")
+
+
+def credit_node(state: AgentState) -> dict:
+    """Nó do agente de crédito."""
+    return _agent_node(state, "credit")
+
+
+def interview_node(state: AgentState) -> dict:
+    """Nó do agente de entrevista de crédito."""
+    return _agent_node(state, "interview")
+
+
+# --- Nó de ferramentas ---
+
+
 def tool_node(state: AgentState) -> dict:
-    """Nó de execução de ferramentas: executa as tool calls e atualiza o estado."""
+    """Executa as tool calls da última mensagem e atualiza o estado."""
     last_message: AIMessage = state["messages"][-1]
     tool_messages: list[ToolMessage] = []
     state_updates: dict = {}
@@ -91,79 +134,144 @@ def tool_node(state: AgentState) -> dict:
             )
         )
 
-        # Atualiza o estado com base no resultado da ferramenta
+        result_str = str(result)
+
+        # --- Atualizações de estado por ferramenta ---
+
         if tool_name == "end_conversation":
             state_updates["should_end"] = True
 
         elif tool_name == "authenticate_client":
-            result_str = str(result)
-            if result_str.startswith("SUCESSO"):
-                # Extrai dados do cliente da resposta
-                state_updates["authenticated"] = True
-                try:
-                    parts = result_str.split(", ")
-                    client_data = {}
-                    for part in parts:
-                        if "Nome:" in part:
-                            client_data["nome"] = part.split("Nome:")[1].strip()
-                        elif "CPF:" in part:
-                            client_data["cpf"] = part.split("CPF:")[1].strip()
-                        elif "Limite de crédito:" in part:
-                            val = part.split("R$")[1].strip()
-                            client_data["limite_credito"] = float(val)
-                        elif "Score:" in part:
-                            client_data["score"] = int(
-                                part.split("Score:")[1].strip()
-                            )
-                    state_updates["client_data"] = client_data
-                except (IndexError, ValueError) as e:
-                    logger.warning("Erro ao parsear dados do cliente: %s", e)
-                    state_updates["client_data"] = {"raw": result_str}
-            elif result_str.startswith("FALHA"):
-                state_updates["auth_attempts"] = state.get("auth_attempts", 0) + 1
+            _handle_auth_result(result_str, state, state_updates)
+
+        elif tool_name in TRANSFER_MAP:
+            state_updates["current_agent"] = TRANSFER_MAP[tool_name]
+
+        elif tool_name == "update_client_score":
+            _handle_score_update(result_str, state, state_updates)
+
+        elif tool_name == "request_limit_increase":
+            _handle_limit_increase(result_str, tool_args, state, state_updates)
 
     return {"messages": tool_messages, **state_updates}
+
+
+def _handle_auth_result(
+    result_str: str, state: AgentState, state_updates: dict
+) -> None:
+    """Processa o resultado de authenticate_client e atualiza o estado."""
+    if result_str.startswith("SUCESSO"):
+        state_updates["authenticated"] = True
+        try:
+            parts = result_str.split(", ")
+            client_data = {}
+            for part in parts:
+                if "Nome:" in part:
+                    client_data["nome"] = part.split("Nome:")[1].strip()
+                elif "CPF:" in part:
+                    client_data["cpf"] = part.split("CPF:")[1].strip()
+                elif "Limite de crédito:" in part:
+                    val = part.split("R$")[1].strip()
+                    client_data["limite_credito"] = float(val)
+                elif "Score:" in part:
+                    client_data["score"] = int(part.split("Score:")[1].strip())
+            state_updates["client_data"] = client_data
+        except (IndexError, ValueError) as e:
+            logger.warning("Erro ao parsear dados do cliente: %s", e)
+            state_updates["client_data"] = {"raw": result_str}
+    elif result_str.startswith("FALHA"):
+        state_updates["auth_attempts"] = state.get("auth_attempts", 0) + 1
+
+
+def _handle_score_update(
+    result_str: str, state: AgentState, state_updates: dict
+) -> None:
+    """Processa o resultado de update_client_score e atualiza client_data."""
+    if result_str.startswith("ATUALIZADO") and state.get("client_data"):
+        try:
+            new_score = int(result_str.split("para ")[1].rstrip("."))
+            client_data = dict(state["client_data"])
+            client_data["score"] = new_score
+            state_updates["client_data"] = client_data
+        except (IndexError, ValueError) as e:
+            logger.warning("Erro ao parsear novo score: %s", e)
+
+
+def _handle_limit_increase(
+    result_str: str,
+    tool_args: dict,
+    state: AgentState,
+    state_updates: dict,
+) -> None:
+    """Processa o resultado de request_limit_increase e atualiza client_data."""
+    if result_str.startswith("APROVADO") and state.get("client_data"):
+        try:
+            new_limit = float(tool_args["new_limit"])
+            client_data = dict(state["client_data"])
+            client_data["limite_credito"] = new_limit
+            state_updates["client_data"] = client_data
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Erro ao atualizar limite no estado: %s", e)
 
 
 # --- Roteamento condicional ---
 
 
+def route_entry(state: AgentState) -> str:
+    """Decide qual agente deve processar a mensagem na entrada do grafo."""
+    return state.get("current_agent", "triage")
+
+
 def should_continue(state: AgentState) -> str:
-    """Decide o próximo passo após o nó do agente."""
+    """Decide se deve executar ferramentas ou encerrar o turno."""
     last_message = state["messages"][-1]
 
-    # Se o LLM fez chamadas de ferramenta, vá para o nó de ferramentas
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
 
-    # Caso contrário, a resposta é final (texto puro)
     return END
 
 
-def after_tools(state: AgentState) -> str:
-    """Decide o próximo passo após a execução de ferramentas.
+def route_after_tools(state: AgentState) -> str:
+    """Após ferramentas, roteia para o agente atual (que pode ter mudado
+    por uma ferramenta de transferência)."""
+    return state.get("current_agent", "triage")
 
-    Sempre volta ao agente para que ele possa processar o resultado das
-    ferramentas e produzir uma resposta adequada (inclusive mensagem de
-    despedida após end_conversation).
-    """
-    return "triage"
+
+# --- Construção do grafo ---
+
 
 def build_graph() -> StateGraph:
-    """Constrói e retorna o grafo compilado do sistema de atendimento."""
+    """Constrói e retorna o grafo compilado do sistema multi-agente."""
     builder = StateGraph(AgentState)
 
-    # Adiciona nós
+    # Nós de agentes
     builder.add_node("triage", triage_node)
+    builder.add_node("credit", credit_node)
+    builder.add_node("interview", interview_node)
     builder.add_node("tools", tool_node)
 
-    # Ponto de entrada
-    builder.set_entry_point("triage")
+    # Entrada condicional: roteia para o agente atual
+    builder.add_conditional_edges(
+        START,
+        route_entry,
+        {"triage": "triage", "credit": "credit", "interview": "interview"},
+    )
 
-    # Arestas condicionais
-    builder.add_conditional_edges("triage", should_continue, {"tools": "tools", END: END})
-    builder.add_conditional_edges("tools", after_tools, {"triage": "triage"})
+    # Cada agente → should_continue → (tools | END)
+    for agent_name in ["triage", "credit", "interview"]:
+        builder.add_conditional_edges(
+            agent_name, should_continue, {"tools": "tools", END: END}
+        )
+
+    # Após ferramentas → roteia para o agente correto
+    builder.add_conditional_edges(
+        "tools",
+        route_after_tools,
+        {"triage": "triage", "credit": "credit", "interview": "interview"},
+    )
 
     return builder.compile()
+
 
 graph = build_graph()
