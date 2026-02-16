@@ -1,3 +1,5 @@
+"""Ferramenta de autenticação de clientes do Banco Ágil."""
+
 import csv
 import logging
 import os
@@ -13,9 +15,7 @@ CLIENTS_CSV = os.path.join(DATA_DIR, "clientes.csv")
 
 @tool
 def authenticate_client(cpf: str, birth_date: str) -> str:
-    """Autentica um cliente do Banco Ágil verificando CPF e data de nascimento
-    contra a base de dados. O CPF deve conter apenas números (11 dígitos) e a
-    data de nascimento deve estar no formato DD/MM/AAAA.
+    """Autentica um cliente verificando CPF e data de nascimento na base de dados.
 
     Args:
         cpf: CPF do cliente (apenas números, 11 dígitos).
@@ -24,7 +24,6 @@ def authenticate_client(cpf: str, birth_date: str) -> str:
     Returns:
         Resultado da autenticação com dados do cliente ou mensagem de erro.
     """
-    # Normaliza o CPF removendo pontuação
     cpf_clean = cpf.replace(".", "").replace("-", "").replace(" ", "")
 
     if len(cpf_clean) != 11 or not cpf_clean.isdigit():
@@ -32,7 +31,6 @@ def authenticate_client(cpf: str, birth_date: str) -> str:
             "FALHA: CPF inválido. O CPF deve conter exatamente 11 dígitos numéricos."
         )
 
-    # Normaliza a data (aceita formatos comuns)
     birth_clean = birth_date.strip()
 
     try:

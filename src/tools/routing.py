@@ -1,11 +1,11 @@
+"""Ferramentas de transferência implícita entre agentes."""
+
 from langchain_core.tools import tool
 
 
 @tool
 def transfer_to_credit() -> str:
-    """Transfere o atendimento para o serviço de crédito do Banco Ágil.
-    Use quando o cliente autenticado deseja consultar ou alterar seu limite
-    de crédito.
+    """Transfere o atendimento para o serviço de crédito.
 
     Returns:
         Confirmação de transferência.
@@ -15,9 +15,7 @@ def transfer_to_credit() -> str:
 
 @tool
 def transfer_to_interview() -> str:
-    """Transfere o atendimento para a entrevista de crédito do Banco Ágil.
-    Use quando o cliente deseja tentar recalcular seu score de crédito
-    por meio de uma entrevista financeira.
+    """Transfere o atendimento para a entrevista de crédito.
 
     Returns:
         Confirmação de transferência.
@@ -27,9 +25,7 @@ def transfer_to_interview() -> str:
 
 @tool
 def transfer_to_exchange() -> str:
-    """Transfere o atendimento para o serviço de câmbio do Banco Ágil.
-    Use quando o cliente autenticado deseja consultar cotações de moedas
-    estrangeiras.
+    """Transfere o atendimento para o serviço de câmbio.
 
     Returns:
         Confirmação de transferência.
@@ -39,9 +35,7 @@ def transfer_to_exchange() -> str:
 
 @tool
 def transfer_to_triage() -> str:
-    """Transfere o atendimento de volta para a triagem do Banco Ágil.
-    Use quando o atendimento no serviço atual foi concluído e o cliente
-    pode ter outras necessidades.
+    """Transfere o atendimento de volta para a triagem.
 
     Returns:
         Confirmação de transferência.

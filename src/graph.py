@@ -1,3 +1,9 @@
+"""Grafo multi-agente do Banco Ágil.
+
+Orquestra os agentes de triagem, crédito, entrevista e câmbio usando
+LangGraph com roteamento condicional e transferências implícitas.
+"""
+
 import logging
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -13,15 +19,15 @@ from langgraph.graph import END, START, StateGraph
 
 logger = logging.getLogger(__name__)
 
-# Configuração de cada agente: prompt de sistema e ferramentas
-AGENT_CONFIG = {
+AGENT_CONFIG: dict[str, dict] = {
     "triage": {"prompt": TRIAGE_SYSTEM_PROMPT, "tools": TRIAGE_TOOLS},
     "credit": {"prompt": CREDIT_SYSTEM_PROMPT, "tools": CREDIT_TOOLS},
     "interview": {"prompt": INTERVIEW_SYSTEM_PROMPT, "tools": INTERVIEW_TOOLS},
     "exchange": {"prompt": EXCHANGE_SYSTEM_PROMPT, "tools": EXCHANGE_TOOLS},
 }
+"""Prompt de sistema e ferramentas de cada agente."""
 
-# Mapa global de ferramentas por nome (deduplicado)
+# Mapa global de ferramentas
 ALL_TOOLS = list(
     {
         tool.name: tool
@@ -29,19 +35,19 @@ ALL_TOOLS = list(
         for tool in config["tools"]
     }.values()
 )
-TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
+TOOL_MAP: dict[str, object] = {tool.name: tool for tool in ALL_TOOLS}
 
-# Mapa de ferramentas de transferência → agente de destino
-TRANSFER_MAP = {
+TRANSFER_MAP: dict[str, str] = {
     "transfer_to_credit": "credit",
     "transfer_to_exchange": "exchange",
     "transfer_to_interview": "interview",
     "transfer_to_triage": "triage",
 }
+"""Mapeia ferramentas de transferência ao agente de destino."""
 
 
 def _get_initial_state() -> dict:
-    """Retorna o estado inicial padrão para uma nova conversa."""
+    """Retorna o estado inicial para uma nova conversa."""
     return {
         "authenticated": False,
         "client_data": None,
@@ -51,11 +57,16 @@ def _get_initial_state() -> dict:
     }
 
 
-# --- Nó genérico de agente ---
-
-
 def _agent_node(state: AgentState, agent_name: str) -> dict:
-    """Nó genérico: chama o LLM com o prompt e ferramentas do agente."""
+    """Nó genérico que invoca o LLM com prompt e ferramentas do agente.
+
+    Args:
+        state: Estado atual do grafo.
+        agent_name: Identificador do agente em ``AGENT_CONFIG``.
+
+    Returns:
+        Dicionário com a mensagem de resposta do LLM.
+    """
     config = AGENT_CONFIG[agent_name]
     llm = get_llm()
     llm_with_tools = llm.bind_tools(config["tools"])
@@ -75,9 +86,6 @@ def _agent_node(state: AgentState, agent_name: str) -> dict:
         return {"messages": [error_msg]}
 
     return {"messages": [response]}
-
-
-# --- Nós específicos (wrappers) ---
 
 
 def triage_node(state: AgentState) -> dict:
@@ -100,11 +108,19 @@ def exchange_node(state: AgentState) -> dict:
     return _agent_node(state, "exchange")
 
 
-# --- Nó de ferramentas ---
-
-
 def tool_node(state: AgentState) -> dict:
-    """Executa as tool calls da última mensagem e atualiza o estado."""
+    """Executa as *tool calls* pendentes e atualiza o estado.
+
+    Processa cada chamada de ferramenta da última mensagem do LLM,
+    coleta os resultados em ``ToolMessage`` e aplica efeitos colaterais
+    no estado (autenticação, transferência, encerramento, etc.).
+
+    Args:
+        state: Estado atual do grafo.
+
+    Returns:
+        Dicionário com mensagens de resultado e atualizações de estado.
+    """
     last_message: AIMessage = state["messages"][-1]
     tool_messages: list[ToolMessage] = []
     state_updates: dict = {}
@@ -144,8 +160,6 @@ def tool_node(state: AgentState) -> dict:
 
         result_str = str(result)
 
-        # --- Atualizações de estado por ferramenta ---
-
         if tool_name == "end_conversation":
             state_updates["should_end"] = True
 
@@ -167,7 +181,7 @@ def tool_node(state: AgentState) -> dict:
 def _handle_auth_result(
     result_str: str, state: AgentState, state_updates: dict
 ) -> None:
-    """Processa o resultado de authenticate_client e atualiza o estado."""
+    """Atualiza o estado com o resultado de ``authenticate_client``."""
     if result_str.startswith("SUCESSO"):
         state_updates["authenticated"] = True
         try:
@@ -194,7 +208,7 @@ def _handle_auth_result(
 def _handle_score_update(
     result_str: str, state: AgentState, state_updates: dict
 ) -> None:
-    """Processa o resultado de update_client_score e atualiza client_data."""
+    """Atualiza ``client_data`` com o novo score após ``update_client_score``."""
     if result_str.startswith("ATUALIZADO") and state.get("client_data"):
         try:
             new_score = int(result_str.split("para ")[1].rstrip("."))
@@ -211,7 +225,7 @@ def _handle_limit_increase(
     state: AgentState,
     state_updates: dict,
 ) -> None:
-    """Processa o resultado de request_limit_increase e atualiza client_data."""
+    """Atualiza ``client_data`` com o novo limite após ``request_limit_increase``."""
     if result_str.startswith("APROVADO") and state.get("client_data"):
         try:
             new_limit = float(tool_args["new_limit"])
@@ -222,16 +236,13 @@ def _handle_limit_increase(
             logger.warning("Erro ao atualizar limite no estado: %s", e)
 
 
-# --- Roteamento condicional ---
-
-
 def route_entry(state: AgentState) -> str:
-    """Decide qual agente deve processar a mensagem na entrada do grafo."""
+    """Roteia a entrada do grafo para o agente ativo."""
     return state.get("current_agent", "triage")
 
 
 def should_continue(state: AgentState) -> str:
-    """Decide se deve executar ferramentas ou encerrar o turno."""
+    """Retorna ``'tools'`` se há chamadas de ferramenta pendentes, senão ``END``."""
     last_message = state["messages"][-1]
 
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
@@ -241,8 +252,7 @@ def should_continue(state: AgentState) -> str:
 
 
 def route_after_tools(state: AgentState) -> str:
-    """Após ferramentas, roteia para o agente atual (que pode ter mudado
-    por uma ferramenta de transferência)."""
+    """Após executar ferramentas, roteia para o agente ativo (pode ter mudado por transferência)."""
     return state.get("current_agent", "triage")
 
 
@@ -250,10 +260,16 @@ def route_after_tools(state: AgentState) -> str:
 
 
 def build_graph() -> StateGraph:
-    """Constrói e retorna o grafo compilado do sistema multi-agente."""
+    """Constrói e compila o grafo multi-agente.
+
+    Registra os nós de cada agente e o nó de ferramentas, conectando-os
+    com arestas condicionais para roteamento dinâmico.
+
+    Returns:
+        Grafo compilado pronto para ``invoke``.
+    """
     builder = StateGraph(AgentState)
 
-    # Nós de agentes
     agent_names = ["triage", "credit", "interview", "exchange"]
     agent_map = {n: n for n in agent_names}
 
@@ -264,7 +280,6 @@ def build_graph() -> StateGraph:
     builder.add_node("exchange", exchange_node)
     builder.add_node("tools", tool_node)
 
-    # Entrada condicional: roteia para o agente atual
     builder.add_conditional_edges(START, route_entry, agent_map)
 
     # Cada agente → should_continue → (tools | END)
@@ -273,7 +288,6 @@ def build_graph() -> StateGraph:
             name, should_continue, {"tools": "tools", END: END}
         )
 
-    # Após ferramentas → roteia para o agente correto
     builder.add_conditional_edges("tools", route_after_tools, agent_map)
 
     return builder.compile()

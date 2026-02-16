@@ -1,3 +1,5 @@
+"""Configuração do agente de câmbio (cotações de moedas)."""
+
 from langchain_core.messages import SystemMessage
 
 from src.tools.common import end_conversation

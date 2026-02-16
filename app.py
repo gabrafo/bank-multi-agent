@@ -1,3 +1,5 @@
+"""Frontend Streamlit do atendimento virtual do Banco Ágil."""
+
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -9,8 +11,6 @@ st.set_page_config(
     layout="centered",
 )
 
-# --- Inicialização do estado da sessão ---
-
 if "graph" not in st.session_state:
     try:
         st.session_state.graph = build_graph()
@@ -20,7 +20,6 @@ if "graph" not in st.session_state:
 
 if "agent_state" not in st.session_state:
     st.session_state.agent_state = {**_get_initial_state(), "messages": []}
-    # Primeira interação: agente inicia a conversa
     try:
         result = st.session_state.graph.invoke(st.session_state.agent_state)
         st.session_state.agent_state = result
@@ -28,7 +27,6 @@ if "agent_state" not in st.session_state:
         pass
 
 if "chat_history" not in st.session_state:
-    # Extrai a saudação inicial do agente
     st.session_state.chat_history = []
     for msg in st.session_state.agent_state["messages"]:
         if isinstance(msg, AIMessage) and msg.content:
@@ -37,18 +35,12 @@ if "chat_history" not in st.session_state:
             )
             break
 
-# --- Header ---
-
 st.title("🏦 Banco Ágil")
 st.caption("Atendimento Virtual Inteligente")
-
-# --- Exibir histórico do chat ---
 
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-
-# --- Input do usuário ---
 
 if st.session_state.agent_state.get("should_end", False):
     st.info("Atendimento encerrado. Atualize a página para iniciar uma nova conversa.")
@@ -99,6 +91,5 @@ else:
                     {"role": "assistant", "content": response}
                 )
 
-        # Rerun para atualizar estado (ex: mostrar botão de nova conversa)
         if st.session_state.agent_state.get("should_end", False):
             st.rerun()

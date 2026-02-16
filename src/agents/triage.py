@@ -1,3 +1,5 @@
+"""Configuração do agente de triagem (autenticação e roteamento inicial)."""
+
 from langchain_core.messages import SystemMessage
 
 from src.tools.auth import authenticate_client

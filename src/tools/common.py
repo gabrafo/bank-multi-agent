@@ -1,10 +1,11 @@
+"""Ferramentas comuns a todos os agentes."""
+
 from langchain_core.tools import tool
 
 
 @tool
 def end_conversation() -> str:
-    """Encerra o atendimento com o cliente. Deve ser chamada quando o cliente
-    solicitar o fim da conversa ou quando o atendimento for concluído.
+    """Encerra o atendimento com o cliente.
 
     Returns:
         Confirmação de encerramento.

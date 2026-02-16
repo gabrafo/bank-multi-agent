@@ -1,3 +1,5 @@
+"""Ferramentas de consulta e solicitação de limite de crédito."""
+
 import csv
 import logging
 import os
@@ -15,7 +17,11 @@ REQUESTS_CSV = os.path.join(DATA_DIR, "solicitacoes_aumento_limite.csv")
 
 
 def _read_clients() -> tuple[list[dict], list[str] | None]:
-    """Lê todos os clientes do CSV. Retorna (rows, fieldnames) ou levanta exceção."""
+    """Lê todos os registros de ``clientes.csv``.
+
+    Returns:
+        Tupla ``(linhas, nomes_das_colunas)``.
+    """
     with open(CLIENTS_CSV, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames
@@ -24,7 +30,15 @@ def _read_clients() -> tuple[list[dict], list[str] | None]:
 
 
 def _find_client(rows: list[dict], cpf_clean: str) -> dict | None:
-    """Encontra um cliente pelo CPF normalizado."""
+    """Localiza um cliente pelo CPF normalizado.
+
+    Args:
+        rows: Lista de registros de clientes.
+        cpf_clean: CPF sem formatação.
+
+    Returns:
+        Dicionário do cliente ou ``None``.
+    """
     for row in rows:
         row_cpf = row["cpf"].strip().replace(".", "").replace("-", "")
         if row_cpf == cpf_clean:
@@ -33,7 +47,16 @@ def _find_client(rows: list[dict], cpf_clean: str) -> dict | None:
 
 
 def _get_max_limit_for_score(score: int) -> float | None:
-    """Consulta o limite máximo permitido para um dado score."""
+    """Retorna o limite máximo permitido para o *score* informado.
+
+    Consulta ``score_limite.csv`` para encontrar a faixa correspondente.
+
+    Args:
+        score: Score de crédito do cliente.
+
+    Returns:
+        Limite máximo em reais ou ``None`` se não encontrado.
+    """
     with open(SCORE_LIMIT_CSV, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -43,19 +66,19 @@ def _get_max_limit_for_score(score: int) -> float | None:
 
 
 def _normalize_cpf(cpf: str) -> str:
-    """Remove formatação do CPF."""
+    """Remove pontos, traços e espaços de um CPF."""
     return cpf.replace(".", "").replace("-", "").replace(" ", "")
 
 
 @tool
 def query_credit_limit(cpf: str) -> str:
-    """Consulta o limite de crédito atual do cliente pelo CPF.
+    """Consulta o limite de crédito atual de um cliente.
 
     Args:
         cpf: CPF do cliente (apenas números, 11 dígitos).
 
     Returns:
-        Informações sobre o limite de crédito do cliente.
+        Limite de crédito, score e nome do cliente ou mensagem de erro.
     """
     cpf_clean = _normalize_cpf(cpf)
 
@@ -87,22 +110,21 @@ def query_credit_limit(cpf: str) -> str:
 
 @tool
 def request_limit_increase(cpf: str, new_limit: float) -> str:
-    """Solicita aumento do limite de crédito do cliente.
+    """Solicita aumento do limite de crédito de um cliente.
 
-    O sistema verifica automaticamente se o score do cliente permite o novo
-    limite solicitado, consulta a tabela de score/limite e registra a
-    solicitação no arquivo de controle.
+    Verifica se o score permite o novo limite, registra a solicitação em
+    ``solicitacoes_aumento_limite.csv`` e, se aprovado, atualiza
+    ``clientes.csv``.
 
     Args:
         cpf: CPF do cliente (apenas números, 11 dígitos).
-        new_limit: Novo limite de crédito desejado em reais.
+        new_limit: Novo limite desejado em reais.
 
     Returns:
-        Resultado da solicitação (aprovado ou rejeitado) com detalhes.
+        Resultado (aprovado/rejeitado) com detalhes.
     """
     cpf_clean = _normalize_cpf(cpf)
 
-    # 1. Ler dados do cliente
     try:
         rows, fieldnames = _read_clients()
     except FileNotFoundError:
@@ -132,7 +154,6 @@ def request_limit_increase(cpf: str, new_limit: float) -> str:
             f"Não é necessário solicitar aumento."
         )
 
-    # 2. Verificar limite máximo permitido pelo score
     try:
         max_allowed = _get_max_limit_for_score(score)
     except FileNotFoundError:
@@ -154,10 +175,8 @@ def request_limit_increase(cpf: str, new_limit: float) -> str:
             f"o score {score}. Por favor, tente novamente mais tarde."
         )
 
-    # 3. Determinar status
     status = "aprovado" if new_limit <= max_allowed else "rejeitado"
 
-    # 4. Registrar solicitação
     timestamp = datetime.now().isoformat()
     try:
         with open(REQUESTS_CSV, "a", newline="", encoding="utf-8") as f:
@@ -172,7 +191,6 @@ def request_limit_increase(cpf: str, new_limit: float) -> str:
             "Por favor, tente novamente mais tarde."
         )
 
-    # 5. Se aprovado, atualizar limite do cliente
     if status == "aprovado":
         try:
             client["limite_credito"] = f"{new_limit:.2f}"

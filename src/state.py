@@ -1,25 +1,25 @@
+"""Definição do estado compartilhado entre os agentes."""
+
 from typing import Annotated, Any, Optional, TypedDict
 
 from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
-    """Estado compartilhado entre todos os agentes do grafo."""
+    """Estado compartilhado entre todos os nós do grafo.
 
-    # Histórico de mensagens da conversa (com merge automático do LangGraph)
+    Attributes:
+        messages: Histórico de mensagens (merge automático via ``add_messages``).
+        authenticated: Indica se o cliente foi autenticado.
+        client_data: Dados do cliente autenticado (nome, cpf, limite, score).
+        auth_attempts: Quantidade de tentativas de autenticação realizadas.
+        current_agent: Identificador do agente ativo.
+        should_end: Sinaliza que a conversa deve ser encerrada.
+    """
+
     messages: Annotated[list, add_messages]
-
-    # Flag de autenticação do cliente
     authenticated: bool
-
-    # Dados do cliente autenticado (nome, cpf, limite, score, etc.)
     client_data: Optional[dict[str, Any]]
-
-    # Número de tentativas de autenticação realizadas
     auth_attempts: int
-
-    # Agente ativo no momento (triagem, credito, entrevista, cambio)
     current_agent: str
-
-    # Flag para indicar que a conversa deve ser encerrada
     should_end: bool

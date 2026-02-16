@@ -1,3 +1,5 @@
+"""Ferramenta de consulta de cotações de moedas via AwesomeAPI."""
+
 import logging
 
 import requests
@@ -7,8 +9,7 @@ logger = logging.getLogger(__name__)
 
 AWESOME_API_URL = "https://economia.awesomeapi.com.br/json/last"
 
-# Moedas comuns e seus nomes em português
-CURRENCY_NAMES = {
+CURRENCY_NAMES: dict[str, str] = {
     "USD": "Dólar Americano",
     "EUR": "Euro",
     "GBP": "Libra Esterlina",
@@ -23,14 +24,16 @@ CURRENCY_NAMES = {
 
 @tool
 def get_exchange_rate(currency_code: str) -> str:
-    """Consulta a cotação atual de uma moeda estrangeira em relação ao Real
-    brasileiro (BRL) usando a API AwesomeAPI.
+    """Consulta a cotação de uma moeda estrangeira em relação ao Real (BRL).
+
+    Utiliza a AwesomeAPI para obter valores de compra, venda, máxima,
+    mínima e variação percentual do dia.
 
     Args:
-        currency_code: Código da moeda (ex: USD, EUR, GBP, ARS, BTC).
+        currency_code: Código da moeda (ex.: USD, EUR, GBP, BTC).
 
     Returns:
-        Cotação atual com detalhes ou mensagem de erro.
+        Cotação formatada ou mensagem de erro.
     """
     code = currency_code.upper().strip()
 
@@ -83,7 +86,6 @@ def get_exchange_rate(currency_code: str) -> str:
             "Por favor, tente novamente mais tarde."
         )
 
-    # A chave no JSON é "USDBRL", "EURBRL", etc.
     key = f"{code}BRL"
     if key not in data:
         return (

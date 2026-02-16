@@ -1,3 +1,5 @@
+"""Ferramentas de entrevista financeira para recálculo de score de crédito."""
+
 import csv
 import logging
 import os
@@ -9,8 +11,6 @@ from src.config import DATA_DIR
 logger = logging.getLogger(__name__)
 
 CLIENTS_CSV = os.path.join(DATA_DIR, "clientes.csv")
-
-# --- Pesos para cálculo do score ---
 
 PESO_RENDA = 30
 
@@ -41,20 +41,22 @@ def calculate_credit_score(
     num_dependentes: int,
     tem_dividas: str,
 ) -> str:
-    """Calcula um novo score de crédito com base nos dados da entrevista
-    financeira do cliente.
+    """Calcula um novo score de crédito com base em dados da entrevista financeira.
+
+    Fórmula: ``(renda / (despesas + 1)) * PESO_RENDA + emprego + dependentes + dívidas``.
+    O resultado é limitado entre 0 e 1000.
 
     Args:
-        renda_mensal: Renda mensal do cliente em reais.
+        renda_mensal: Renda mensal em reais.
         tipo_emprego: Tipo de emprego (formal, autônomo ou desempregado).
-        despesas_fixas: Total de despesas fixas mensais em reais.
-        num_dependentes: Número de dependentes do cliente.
-        tem_dividas: Se possui dívidas ativas (sim ou não).
+        despesas_fixas: Despesas fixas mensais em reais.
+        num_dependentes: Quantidade de dependentes.
+        tem_dividas: Possui dívidas ativas (sim ou não).
 
     Returns:
-        Score calculado com detalhes do cálculo.
+        Score calculado com detalhes ou mensagem de erro.
     """
-    # Validações
+    # Validar entradas
     if renda_mensal < 0:
         return "ERRO: Renda mensal não pode ser negativa."
 
@@ -75,7 +77,7 @@ def calculate_credit_score(
     if tem_dividas_lower not in PESO_DIVIDAS:
         return "ERRO: Resposta sobre dívidas inválida. Use: sim ou não."
 
-    # Cálculo
+    # Calcular score
     peso_dep = PESO_DEPENDENTES.get(num_dependentes, PESO_DEPENDENTES_3_MAIS)
 
     score = (
@@ -85,7 +87,6 @@ def calculate_credit_score(
         + PESO_DIVIDAS[tem_dividas_lower]
     )
 
-    # Limitar entre 0 e 1000
     score = max(0, min(1000, int(round(score))))
 
     return (
@@ -100,14 +101,14 @@ def calculate_credit_score(
 
 @tool
 def update_client_score(cpf: str, new_score: int) -> str:
-    """Atualiza o score de crédito do cliente na base de dados.
+    """Atualiza o score de crédito de um cliente em ``clientes.csv``.
 
     Args:
         cpf: CPF do cliente (apenas números, 11 dígitos).
         new_score: Novo score de crédito (0 a 1000).
 
     Returns:
-        Confirmação da atualização ou mensagem de erro.
+        Confirmação com scores anterior e novo, ou mensagem de erro.
     """
     cpf_clean = cpf.replace(".", "").replace("-", "").replace(" ", "")
 
