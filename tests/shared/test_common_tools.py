@@ -3,6 +3,7 @@
 from src.tools.common import end_conversation
 from src.tools.routing import (
     transfer_to_credit,
+    transfer_to_exchange,
     transfer_to_interview,
     transfer_to_triage,
 )
@@ -35,3 +36,8 @@ class TestTransferTools:
         result = transfer_to_triage.invoke({})
         assert result.startswith("TRANSFERÊNCIA")
         assert "triagem" in result
+
+    def test_transfer_to_exchange(self):
+        result = transfer_to_exchange.invoke({})
+        assert result.startswith("TRANSFERÊNCIA")
+        assert "câmbio" in result

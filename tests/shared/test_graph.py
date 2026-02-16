@@ -71,6 +71,7 @@ class TestBuildGraph:
         assert "triage" in node_names
         assert "credit" in node_names
         assert "interview" in node_names
+        assert "exchange" in node_names
         assert "tools" in node_names
 
 
@@ -89,6 +90,10 @@ class TestRouteEntry:
     def test_routes_to_interview(self):
         state = {"current_agent": "interview"}
         assert route_entry(state) == "interview"
+
+    def test_routes_to_exchange(self):
+        state = {"current_agent": "exchange"}
+        assert route_entry(state) == "exchange"
 
     def test_defaults_to_triage_when_missing(self):
         assert route_entry({}) == "triage"
@@ -120,6 +125,7 @@ class TestRouteAfterTools:
         assert route_after_tools({"current_agent": "triage"}) == "triage"
         assert route_after_tools({"current_agent": "credit"}) == "credit"
         assert route_after_tools({"current_agent": "interview"}) == "interview"
+        assert route_after_tools({"current_agent": "exchange"}) == "exchange"
 
     def test_defaults_to_triage_when_missing(self):
         assert route_after_tools({}) == "triage"
@@ -172,6 +178,12 @@ class TestToolNodeTransfer:
         state = _make_state_with_tool_call("transfer_to_triage", {})
         result = tool_node(state)
         assert result["current_agent"] == "triage"
+
+    def test_transfer_to_exchange_updates_state(self):
+        state = _make_state_with_tool_call("transfer_to_exchange", {})
+        result = tool_node(state)
+        assert result["current_agent"] == "exchange"
+        assert "TRANSFERÊNCIA" in result["messages"][0].content
 
 
 # --- tool_node: authenticate_client ---
