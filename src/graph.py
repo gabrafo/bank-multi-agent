@@ -6,7 +6,7 @@ LangGraph com roteamento condicional e transferências implícitas.
 
 import logging
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from src.agents.credit import CREDIT_SYSTEM_PROMPT, CREDIT_TOOLS
 from src.agents.exchange import EXCHANGE_SYSTEM_PROMPT, EXCHANGE_TOOLS
@@ -71,7 +71,11 @@ def _agent_node(state: AgentState, agent_name: str) -> dict:
     llm = get_llm()
     llm_with_tools = llm.bind_tools(config["tools"])
 
-    messages = [config["prompt"]] + state["messages"]
+    user_messages = state["messages"]
+    if not user_messages:
+        user_messages = [HumanMessage(content="Olá")] # Necessário quando usamos Gemini, pois exige que haja pelo menos uma mensagem de conteúdo do usuário
+
+    messages = [config["prompt"]] + user_messages
 
     try:
         response = llm_with_tools.invoke(messages)
