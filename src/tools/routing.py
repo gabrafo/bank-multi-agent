@@ -26,6 +26,18 @@ def transfer_to_interview() -> str:
 
 
 @tool
+def transfer_to_exchange() -> str:
+    """Transfere o atendimento para o serviço de câmbio do Banco Ágil.
+    Use quando o cliente autenticado deseja consultar cotações de moedas
+    estrangeiras.
+
+    Returns:
+        Confirmação de transferência.
+    """
+    return "TRANSFERÊNCIA: Cliente encaminhado para o serviço de câmbio."
+
+
+@tool
 def transfer_to_triage() -> str:
     """Transfere o atendimento de volta para a triagem do Banco Ágil.
     Use quando o atendimento no serviço atual foi concluído e o cliente

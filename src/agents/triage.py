@@ -2,9 +2,9 @@ from langchain_core.messages import SystemMessage
 
 from src.tools.auth import authenticate_client
 from src.tools.common import end_conversation
-from src.tools.routing import transfer_to_credit
+from src.tools.routing import transfer_to_credit, transfer_to_exchange
 
-TRIAGE_TOOLS = [authenticate_client, end_conversation, transfer_to_credit]
+TRIAGE_TOOLS = [authenticate_client, end_conversation, transfer_to_credit, transfer_to_exchange]
 
 TRIAGE_SYSTEM_PROMPT = SystemMessage(content="""\
 Você é o assistente virtual do Banco Ágil, responsável pelo atendimento inicial ao cliente.
@@ -31,8 +31,8 @@ autenticar e encerre o atendimento usando a ferramenta `end_conversation`.
 ## Serviços disponíveis após autenticação
 - **Crédito**: Consulta de limite de crédito, solicitação de aumento de limite. \
 Use a ferramenta `transfer_to_credit` para encaminhar o cliente.
-- **Câmbio**: Consulta de cotação de moedas. (Temporariamente indisponível — \
-informe gentilmente que este serviço estará disponível em breve.)
+- **Câmbio**: Consulta de cotação de moedas. \
+Use a ferramenta `transfer_to_exchange` para encaminhar o cliente.
 
 ## Regras importantes
 - Mantenha um tom respeitoso, objetivo e profissional.

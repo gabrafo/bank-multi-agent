@@ -3,6 +3,7 @@ import logging
 from langchain_core.messages import AIMessage, ToolMessage
 
 from src.agents.credit import CREDIT_SYSTEM_PROMPT, CREDIT_TOOLS
+from src.agents.exchange import EXCHANGE_SYSTEM_PROMPT, EXCHANGE_TOOLS
 from src.agents.interview import INTERVIEW_SYSTEM_PROMPT, INTERVIEW_TOOLS
 from src.agents.triage import TRIAGE_SYSTEM_PROMPT, TRIAGE_TOOLS
 from src.config import get_llm
@@ -17,6 +18,7 @@ AGENT_CONFIG = {
     "triage": {"prompt": TRIAGE_SYSTEM_PROMPT, "tools": TRIAGE_TOOLS},
     "credit": {"prompt": CREDIT_SYSTEM_PROMPT, "tools": CREDIT_TOOLS},
     "interview": {"prompt": INTERVIEW_SYSTEM_PROMPT, "tools": INTERVIEW_TOOLS},
+    "exchange": {"prompt": EXCHANGE_SYSTEM_PROMPT, "tools": EXCHANGE_TOOLS},
 }
 
 # Mapa global de ferramentas por nome (deduplicado)
@@ -32,6 +34,7 @@ TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}
 # Mapa de ferramentas de transferência → agente de destino
 TRANSFER_MAP = {
     "transfer_to_credit": "credit",
+    "transfer_to_exchange": "exchange",
     "transfer_to_interview": "interview",
     "transfer_to_triage": "triage",
 }
@@ -90,6 +93,11 @@ def credit_node(state: AgentState) -> dict:
 def interview_node(state: AgentState) -> dict:
     """Nó do agente de entrevista de crédito."""
     return _agent_node(state, "interview")
+
+
+def exchange_node(state: AgentState) -> dict:
+    """Nó do agente de câmbio."""
+    return _agent_node(state, "exchange")
 
 
 # --- Nó de ferramentas ---
@@ -246,30 +254,27 @@ def build_graph() -> StateGraph:
     builder = StateGraph(AgentState)
 
     # Nós de agentes
+    agent_names = ["triage", "credit", "interview", "exchange"]
+    agent_map = {n: n for n in agent_names}
+
+    # Nós de agentes
     builder.add_node("triage", triage_node)
     builder.add_node("credit", credit_node)
     builder.add_node("interview", interview_node)
+    builder.add_node("exchange", exchange_node)
     builder.add_node("tools", tool_node)
 
     # Entrada condicional: roteia para o agente atual
-    builder.add_conditional_edges(
-        START,
-        route_entry,
-        {"triage": "triage", "credit": "credit", "interview": "interview"},
-    )
+    builder.add_conditional_edges(START, route_entry, agent_map)
 
     # Cada agente → should_continue → (tools | END)
-    for agent_name in ["triage", "credit", "interview"]:
+    for name in agent_names:
         builder.add_conditional_edges(
-            agent_name, should_continue, {"tools": "tools", END: END}
+            name, should_continue, {"tools": "tools", END: END}
         )
 
     # Após ferramentas → roteia para o agente correto
-    builder.add_conditional_edges(
-        "tools",
-        route_after_tools,
-        {"triage": "triage", "credit": "credit", "interview": "interview"},
-    )
+    builder.add_conditional_edges("tools", route_after_tools, agent_map)
 
     return builder.compile()
 
