@@ -100,7 +100,7 @@ As ferramentas de crédito e entrevista leem e escrevem diretamente nesses arqui
 
 **LangChain** — Fornece as abstrações de mensagens (`HumanMessage`, `AIMessage`, `ToolMessage`), o protocolo de ferramentas (`@tool`) e a integração com provedores de LLM (`ChatGoogleGenerativeAI`). Funciona como a camada de interface entre o LangGraph e o modelo.
 
-**Gemini 2.5 Flash (Google)** — LLM principal do projeto. Free tier com 1.500 requisições/dia. Escolhido por ser a opção com melhor custo-benefício no free tier dentre as alternativas (Groq tinha limite de 100K tokens/dia, que se esgotava em poucas conversas). O projeto também rodou com Groq (LLaMA 3.3 70B) durante o desenvolvimento, reforçando a proposta de ser agnóstico quanto ao modelo.
+**Gemini 2.5 Flash (Google)** — LLM principal do projeto. Escolhido por ser a LLM com melhor desempenho no free tier dentre as alternativas. O projeto também rodou com Groq (LLaMA 3.3 70B) durante o desenvolvimento, reforçando a proposta de ser agnóstico quanto ao modelo.
 
 **AwesomeAPI** — API pública e gratuita de cotação de moedas. Não exige autenticação, retorna dados em JSON simples. Alternativa prática a APIs que exigem cadastro ou chave.
 
@@ -112,7 +112,7 @@ As ferramentas de crédito e entrevista leem e escrevem diretamente nesses arqui
 
 **Modelar o handoff com LangGraph.** O principal desafio foi projetar como os agentes se transferem controle sem que o cliente perceba. A solução foi usar o campo `current_agent` no estado compartilhado: ferramentas de transferência atualizam esse campo, e o roteamento condicional (`route_after_tools`) consulta ele para decidir qual nó executa a seguir. Essa abordagem é simples e extensível — adicionar um novo agente requer apenas um novo nó, um prompt e uma entrada no `TRANSFER_MAP`.
 
-**Manter cobertura de testes alta.** O projeto tem 130 testes com 100% de cobertura. O desafio foi testar o grafo e as ferramentas sem depender do LLM real. Toda chamada ao LLM nos testes é mockada, simulando respostas com e sem tool calls. Os testes são organizados por agente (`tests/triage/`, `tests/credit/`, etc.) para refletir a separação do código.
+**Manter testagem com alta cobertura.** O projeto tem 130 testes com 100% de cobertura. O desafio foi testar o grafo e as ferramentas sem depender do LLM real. Toda chamada ao LLM nos testes é mockada, simulando respostas com e sem tool calls. Os testes são organizados por agente (`tests/triage/`, `tests/credit/`, etc.) para refletir a separação do código.
 
 **Agnosticismo de modelo.** O projeto foi construído para trocar de provedor de LLM com o mínimo de atrito. Toda a configuração de modelo fica isolada em `config.py`, que expõe uma única função `get_llm()`. Durante o desenvolvimento, o projeto migrou de Groq (LLaMA 3.3 70B) para Gemini 2.5 Flash, o que exigiu apenas alterar o import e o construtor em um único arquivo — nenhum outro módulo precisou mudar. O objetivo foi manter essa flexibilidade sem criar camadas excessivas de abstração.
 
