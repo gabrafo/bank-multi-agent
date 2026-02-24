@@ -92,7 +92,7 @@ As ferramentas de crédito e entrevista leem e escrevem diretamente nesses arqui
 - Encerramento de conversa a qualquer momento
 - Observabilidade via LangSmith (tracing de cada nó e tool call)
 
-## Stack e Justificativas
+## Stack
 
 **Python** — Linguagem padrão para aplicações de IA/LLM, com ecossistema maduro de bibliotecas para orquestração de agentes.
 
